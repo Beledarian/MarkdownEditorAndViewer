@@ -57,3 +57,27 @@ The application will be built with a few key components:
 *   **Toolbar:** Add a toolbar with buttons for common Markdown formatting (e.g., bold, italic, lists).
 *   **Export to HTML/PDF:** Allow users to export the rendered content.
 *   **Themes:** Add support for different editor and viewer themes (e.g., dark mode).
+
+## 6. Advanced Development Workflow (Jules Integration)
+
+To accelerate the implementation of new features, this project utilizes **Jules**, an AI coding agent. This workflow enables rapid, parallel development.
+
+### Step 1: Task Decomposition and Delegation
+Instead of manual implementation, new features from the "Future Enhancements" list are broken down into logical, standalone tasks. Each task is then delegated to a separate Jules session for parallel execution.
+
+Example parallel tasks:
+*   **Task A (File Operations):** Implement open and save functionality.
+*   **Task B (Editor Toolbar):** Add a formatting toolbar to the editor.
+*   **Task C (Exporting):** Implement "Export to HTML/PDF" feature.
+*   **Task D (Theming):** Add light and dark mode themes.
+
+### Step 2: Monitoring
+Each Jules session is assigned a unique ID and a console URL for tracking its progress. This allows for real-time monitoring as the agent works on the implementation.
+
+### Step 3: Integration
+Once a Jules session is complete, its proposed code changes are delivered as a patch. The following integration process is used:
+1.  **Pull:** The patch is pulled locally using the `jules remote pull` command.
+2.  **Review:** The changes are applied to a separate branch and reviewed for quality, correctness, and adherence to project conventions.
+3.  **Merge:** After a successful review, the feature branch is merged into the main branch. Any merge conflicts are resolved manually.
+
+This workflow allows for multiple complex features to be developed and integrated in the time it would traditionally take to complete just one.
