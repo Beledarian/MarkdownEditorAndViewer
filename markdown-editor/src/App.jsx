@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import ReactMarkdown from 'react-markdown';
+import MDEditor from '@uiw/react-md-editor';
 import './App.css';
 
 function App() {
   const [markdown, setMarkdown] = useState('# Hello, world!');
-  const [showEditor, setShowEditor] = useState(false);
 
   const handleOpenFile = (event) => {
     const file = event.target.files[0];
@@ -28,11 +27,8 @@ function App() {
   };
 
   return (
-    <div className="app">
+    <div className="app" data-color-mode="dark">
       <div className="button-container">
-        <button onClick={() => setShowEditor(!showEditor)}>
-          {showEditor ? 'Hide Editor' : 'Show Editor'}
-        </button>
         <input
           type="file"
           accept=".md"
@@ -45,15 +41,15 @@ function App() {
         </button>
         <button onClick={handleSaveFile}>Save File</button>
       </div>
-      {showEditor && (
-        <textarea
+      <div className="container">
+        <MDEditor
           value={markdown}
-          onChange={(e) => setMarkdown(e.target.value)}
-          className="editor"
+          onChange={(val) => setMarkdown(val)}
         />
-      )}
-      <div className="preview">
-        <ReactMarkdown>{markdown}</ReactMarkdown>
+        <MDEditor.Markdown
+          source={markdown}
+          style={{ whiteSpace: 'pre-wrap' }}
+        />
       </div>
     </div>
   );
