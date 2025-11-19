@@ -1,11 +1,17 @@
 import { useState } from 'react';
 import MDEditor from '@uiw/react-md-editor';
 import html2pdf from 'html2pdf.js';
+import { Toaster, toast } from 'react-hot-toast';
 import './App.css';
 import cssContent from './App.css?raw';
 
 function App() {
   const [markdown, setMarkdown] = useState('# Hello, world!');
+  const [theme, setTheme] = useState('dark');
+
+  const toggleTheme = () => {
+    setTheme(theme === 'dark' ? 'light' : 'dark');
+  };
 
   const handleOpenFile = (event) => {
     const file = event.target.files[0];
@@ -26,6 +32,7 @@ function App() {
     a.download = 'markdown.md';
     a.click();
     URL.revokeObjectURL(url);
+    toast.success('File Saved Successfully!');
   };
 
   const handleExportHTML = () => {
@@ -46,14 +53,14 @@ function App() {
                 align-items: center;
                 min-height: 100vh;
                 margin: 0;
-                background-color: #2c3e50;
-                color: #ecf0f1;
+                background-color: ${theme === 'dark' ? '#2c3e50' : '#ecf0f1'};
+                color: ${theme === 'dark' ? '#ecf0f1' : '#2c3e50'};
                 font-family: sans-serif;
               }
               .preview {
                 width: 80%;
                 max-width: 800px;
-                background-color: #34495e;
+                background-color: ${theme === 'dark' ? '#34495e' : '#ffffff'};
                 padding: 20px;
                 border-radius: 5px;
               }
@@ -91,7 +98,8 @@ function App() {
   };
 
   return (
-    <div className="app" data-color-mode="dark">
+    <div className="app" data-color-mode={theme} data-theme={theme}>
+      <Toaster />
       <div className="button-container">
         <input
           type="file"
@@ -106,6 +114,9 @@ function App() {
         <button onClick={handleSaveFile}>Save File</button>
         <button onClick={handleExportHTML}>Export as HTML</button>
         <button onClick={handleExportPDF}>Export as PDF</button>
+        <button onClick={toggleTheme}>
+          Switch to {theme === 'dark' ? 'Light' : 'Dark'} Mode
+        </button>
       </div>
       <div className="container">
         <MDEditor

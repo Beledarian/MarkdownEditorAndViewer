@@ -1,44 +1,64 @@
-/* General body styles */
-body {
-  background-color: #2c3e50; /* A dark grey */
-  color: #ecf0f1; /* A light grey for text */
-  font-family: sans-serif;
-  margin: 0;
-  padding: 20px;
+:root {
+  --font-family: sans-serif;
+  --header-height: 60px;
 }
 
-/* App container */
+[data-theme='dark'] {
+  --bg-color: #2c3e50;
+  --text-color: #ecf0f1;
+  --button-bg-color: #00bcd4;
+  --button-text-color: white;
+  --border-color: #00bcd4;
+}
+
+[data-theme='light'] {
+  --bg-color: #ecf0f1;
+  --text-color: #2c3e50;
+  --button-bg-color: #3498db;
+  --button-text-color: white;
+  --border-color: #3498db;
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: var(--font-family);
+  margin: 0;
+  padding: 20px;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
 .app {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  min-height: 100vh;
 }
 
 .button-container {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
-/* Button styling */
 button {
-  background-color: #00bcd4; /* Light blue */
+  background-color: var(--button-bg-color);
   border: none;
-  border-radius: 20px; /* Rounded corners */
-  color: white;
+  border-radius: 20px;
+  color: var(--button-text-color);
   cursor: pointer;
   font-size: 16px;
   padding: 10px 20px;
-  transition: box-shadow 0.3s ease;
-  align-self: flex-start; /* Don't stretch the button */
+  transition: background-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 button:hover {
-  box-shadow: 0 0 15px #00bcd4; /* Glowing effect on hover */
+  box-shadow: 0 0 15px var(--button-bg-color);
 }
 
 .container {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 20px;
-  height: calc(100vh - 40px);
+  height: calc(100vh - 100px); /* Adjusted for button container and padding */
 }
