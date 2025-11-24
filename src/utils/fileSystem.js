@@ -13,7 +13,7 @@ export const loadIgnoreFile = async (directory) => {
       if (Array.isArray(patterns)) {
         return patterns;
       }
-    } catch (err) {
+    } catch {
       // console.log('No .md-ignore file found or invalid format.');
     }
     return ['node_modules', '.git', 'dist', 'build'];

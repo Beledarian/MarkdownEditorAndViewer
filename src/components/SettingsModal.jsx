@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React from 'react';
 
 const SettingsModal = ({ isOpen, onClose, shortcuts, onUpdateShortcut, wordGoal, setWordGoal }) => {
   if (!isOpen) return null;

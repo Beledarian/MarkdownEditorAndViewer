@@ -1,15 +1,18 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import MDEditor from '@uiw/react-md-editor';
-import remarkGfm from 'remark-gfm';
-import '@uiw/react-md-editor/markdown-editor.css';
-import html2pdf from 'html2pdf.js';
 import { Toaster, toast } from 'react-hot-toast';
+import html2pdf from 'html2pdf.js';
 import Sidebar from './components/Sidebar';
-import Tooltip from './components/Tooltip';
 import SettingsModal from './components/SettingsModal';
 import CheatSheetModal from './components/CheatSheetModal';
+import Tooltip from './components/Tooltip';
+import HighlightToolbar from './components/HighlightToolbar';
 import { scanDirectory, loadIgnoreFile, saveIgnoreFile } from './utils/fileSystem';
+import rehypeRaw from 'rehype-raw';
+import { saveDirectoryHandle, getDirectoryHandle } from './utils/storage';
+import { loadAnnotations, saveAnnotations } from './utils/annotations';
 import './App.css';
+import './components/HighlightToolbar.css';
 import cssContent from './App.css?raw';
 
 // Custom Image Component to handle local file blobs
@@ -38,7 +41,7 @@ const CustomImage = ({ src, alt, assets, currentFilePath }) => {
 
                 // 3. Fallback: match by filename (lazy mode)
                 if (!asset) {
-                    const cleanName = src.replace(/^.*[\\\/]/, '');
+                    const cleanName = src.replace(/^.*[\\/]/, '');
                     asset = assets.find(a => a.name === cleanName);
                 }
                 
@@ -96,17 +99,23 @@ function App() {
   
   // File System State
   const [dirHandle, setDirHandle] = useState(null);
+  const [savedHandle, setSavedHandle] = useState(null);
   const [files, setFiles] = useState([]);
   const [assets, setAssets] = useState([]);
   const [ignorePatterns, setIgnorePatterns] = useState(['node_modules', '.git', 'dist', 'build']);
   const [fsLoading, setFsLoading] = useState(false);
 
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
-  const [lastSaved, setLastSaved] = useState(Date.now());
+  const [lastSaved, setLastSaved] = useState(() => Date.now());
   const [isSaving, setIsSaving] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showCheatSheet, setShowCheatSheet] = useState(false);
   const [zenMode, setZenMode] = useState(false);
+
+  // Annotations
+  const [annotations, setAnnotations] = useState({ bookmarks: [], highlights: [] });
+  const [selection, setSelection] = useState(null);
+  const [showHighlightToolbar, setShowHighlightToolbar] = useState(false);
 
   const [shortcuts, setShortcuts] = useState(() => {
       const saved = localStorage.getItem('md-shortcuts');
@@ -137,6 +146,98 @@ function App() {
       localStorage.setItem('md-wordgoal', wordGoal.toString());
   }, [wordGoal]);
 
+  // Check for saved directory handle on mount
+  useEffect(() => {
+      const checkSaved = async () => {
+          try {
+            const handle = await getDirectoryHandle();
+            if (handle) setSavedHandle(handle);
+          } catch (e) {
+            console.error("Error checking saved handle", e);
+          }
+      };
+      checkSaved();
+  }, []);
+
+  useEffect(() => {
+    if (currentFile) {
+      const loadedAnnotations = loadAnnotations(currentFile.path);
+      setAnnotations(loadedAnnotations);
+    }
+  }, [currentFile]);
+
+  useEffect(() => {
+    if (currentFile) {
+      saveAnnotations(currentFile.path, annotations);
+    }
+  }, [annotations, currentFile]);
+
+  const handleMouseUp = () => {
+    const selection = window.getSelection();
+    if (selection.toString().trim() !== '') {
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      setSelection({
+        range,
+        rect,
+        text: selection.toString()
+      });
+      setShowHighlightToolbar(true);
+    } else {
+      setShowHighlightToolbar(false);
+    }
+  };
+
+  const handleHighlight = () => {
+    if (selection) {
+      const { range, text } = selection;
+      const id = `highlight-${Date.now()}`;
+      
+      const startContainer = range.startContainer;
+      const endContainer = range.endContainer;
+      
+      const startContainerPath = getPathTo(startContainer);
+      const endContainerPath = getPathTo(endContainer);
+
+      const newHighlight = {
+        id,
+        text,
+        startContainerPath,
+        endContainerPath,
+        startOffset: range.startOffset,
+        endOffset: range.endOffset,
+      };
+
+      setAnnotations(prev => ({
+        ...prev,
+        highlights: [...prev.highlights, newHighlight]
+      }));
+      
+      // Clear selection and hide toolbar
+      window.getSelection().removeAllRanges();
+      setShowHighlightToolbar(false);
+    }
+  };
+  
+  const getPathTo = (element) => {
+    if (element.id === 'preview') return 'preview';
+    if (!element.parentElement) return null;
+
+    let path = [];
+    let child = element;
+    while (child.parentElement && child.id !== 'preview') {
+      let sibling = child;
+      let count = 1;
+      while (sibling.previousElementSibling) {
+        sibling = sibling.previousElementSibling;
+        count++;
+      }
+      path.unshift(`${child.tagName}:nth-child(${count})`);
+      child = child.parentElement;
+    }
+    return path.join(' > ');
+  };
+  
   // Auto-save logic
   useEffect(() => {
       if (!autoSaveEnabled || !currentFile || !currentFile.handle) return;
@@ -174,9 +275,7 @@ function App() {
       setFsLoading(false);
   }, [dirHandle, ignorePatterns]);
 
-  const handleOpenFolder = async () => {
-    try {
-      const handle = await window.showDirectoryPicker();
+  const loadDirectory = async (handle) => {
       setDirHandle(handle);
       setFsLoading(true);
       
@@ -188,7 +287,15 @@ function App() {
       setAssets(assetFiles);
       setFsLoading(false);
       
-      setSidebarOpen(true); // Auto open sidebar when folder loaded
+      setSidebarOpen(true); 
+  };
+
+  const handleOpenFolder = async () => {
+    try {
+      const handle = await window.showDirectoryPicker();
+      await loadDirectory(handle);
+      await saveDirectoryHandle(handle);
+      setSavedHandle(handle);
       toast.success('Folder opened!');
     } catch (err) {
       if (err.name !== 'AbortError') {
@@ -197,6 +304,30 @@ function App() {
       }
       setFsLoading(false);
     }
+  };
+
+  const handleRestoreFolder = async () => {
+      if (!savedHandle) return;
+      
+      // Verify permission
+      try {
+          // Try to query first
+          let perm = await savedHandle.queryPermission({ mode: 'read' });
+          
+          if (perm !== 'granted') {
+              perm = await savedHandle.requestPermission({ mode: 'read' });
+          }
+
+          if (perm === 'granted') {
+              await loadDirectory(savedHandle);
+              toast.success('Session restored!');
+          } else {
+              toast('Permission needed to access folder.');
+          }
+      } catch (e) {
+          console.error("Failed to restore", e);
+          toast.error("Could not restore folder");
+      }
   };
 
   const handleAddIgnore = async (pattern) => {
@@ -235,6 +366,21 @@ function App() {
   const handleInsertTimestamp = () => {
       const ts = new Date().toISOString();
       setMarkdown(prev => prev + `\n> ${ts}\n`);
+  };
+
+  const applyColor = (color) => {
+    const editor = document.querySelector('.w-md-editor-text-input');
+    if (editor) {
+        const start = editor.selectionStart;
+        const end = editor.selectionEnd;
+        const selectedText = markdown.substring(start, end);
+        const newText = `<span style="color:${color}">${selectedText}</span>`;
+        setMarkdown(markdown.substring(0, start) + newText + markdown.substring(end));
+    }
+  };
+
+  const handleColorChange = (e) => {
+    applyColor(e.target.value);
   };
 
   const handleSaveFile = useCallback(async () => {
@@ -312,14 +458,23 @@ function App() {
   const handleExportPDF = useCallback(() => {
     const previewElement = document.getElementById('preview');
     if (previewElement) {
-      const opt = {
-        margin:       1,
-        filename:     'markdown.pdf',
-        image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true },
-        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-      };
-      html2pdf().from(previewElement).set(opt).save();
+        previewElement.classList.add('pdf-export');
+        
+        const content = previewElement.cloneNode(true);
+        content.style.width = '100%';
+        content.style.height = '100%';
+
+        const opt = {
+            margin:       0.5,
+            filename:     'markdown.pdf',
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { useCORS: true },
+            jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+        };
+
+        html2pdf().from(content).set(opt).save().then(() => {
+            previewElement.classList.remove('pdf-export');
+        });
     }
   }, []);
 
@@ -350,7 +505,7 @@ function App() {
                           let targetHandle = dirHandle;
                           try {
                               targetHandle = await dirHandle.getDirectoryHandle('assets', { create: true });
-                          } catch (e) { /* fallback to root */ }
+                          } catch { /* fallback to root */ }
                           
                           const fileHandle = await targetHandle.getFileHandle(file.name, { create: true });
                           const writable = await fileHandle.createWritable();
@@ -451,9 +606,53 @@ function App() {
       img: (props) => <CustomImage {...props} assets={assets} currentFilePath={currentFile?.path} />
   }), [assets, currentFile]);
 
+  useEffect(() => {
+    const preview = document.getElementById('preview');
+    if (!preview) return;
+
+    // A basic way to clear highlights before re-rendering
+    const existingHighlights = preview.querySelectorAll('.highlight');
+    existingHighlights.forEach(span => {
+        if (span.parentNode) {
+            span.parentNode.replaceChild(document.createTextNode(span.textContent), span);
+        }
+    });
+
+
+    if (annotations.highlights.length > 0) {
+      annotations.highlights.forEach(h => {
+        try {
+          const startContainer = document.querySelector(`#preview ${h.startContainerPath}`);
+          const endContainer = document.querySelector(`#preview ${h.endContainerPath}`);
+          
+          if (startContainer && endContainer) {
+            const range = document.createRange();
+            range.setStart(startContainer.firstChild || startContainer, h.startOffset);
+            range.setEnd(endContainer.firstChild || endContainer, h.endOffset);
+            
+            const highlightSpan = document.createElement('span');
+            highlightSpan.className = 'highlight';
+            highlightSpan.id = h.id;
+            
+            range.surroundContents(highlightSpan);
+          }
+        } catch (e) {
+          console.error("Failed to render highlight", h, e);
+        }
+      });
+    }
+  }, [markdown, annotations.highlights]);
+
   return (
     <div className={`app ${zenMode ? 'zen-mode' : ''}`} data-color-mode={theme} data-theme={theme}>
       <Toaster />
+      {showHighlightToolbar && selection && (
+        <HighlightToolbar
+          top={selection.rect.top - 40}
+          left={selection.rect.left + (selection.rect.width / 2)}
+          onHighlight={handleHighlight}
+        />
+      )}
       <SettingsModal 
         isOpen={showSettings} 
         onClose={() => setShowSettings(false)}
@@ -475,6 +674,15 @@ function App() {
          </Tooltip>
 
         <div className="button-container">
+            {savedHandle && !dirHandle && (
+                 <button 
+                    onClick={handleRestoreFolder} 
+                    style={{borderColor: '#4caf50', color: '#4caf50'}}
+                 >
+                    Restore "{savedHandle.name}"
+                 </button>
+            )}
+
              {/* Fallback File Input */}
             <input
                 type="file"
@@ -509,6 +717,16 @@ function App() {
             <Tooltip text="Copy Markdown" shortcut={shortcuts.copy}>
                 <button onClick={copyToClipboard}>Copy</button>
             </Tooltip>
+
+            <Tooltip text="Text Color">
+                <button onClick={() => document.getElementById('color-picker').click()}>Color</button>
+            </Tooltip>
+            <input
+                type="color"
+                id="color-picker"
+                style={{ display: 'none' }}
+                onChange={handleColorChange}
+            />
             
             <Tooltip text="Toggle View Mode" shortcut={shortcuts.viewMode}>
                 <button onClick={() => setViewMode(!viewMode)}>
@@ -583,11 +801,11 @@ function App() {
                 preview="edit" // We handle preview separately in right pane
             />
             )}
-            <div id="preview" style={{ overflow: 'auto', padding: viewMode ? '20px' : '20px', height: '100%' }}>
+            <div id="preview" onMouseUp={handleMouseUp} style={{ overflow: 'auto', padding: viewMode ? '20px' : '20px', height: '100%' }}>
             <MDEditor.Markdown
                 source={markdown}
                 components={components}
-                remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeRaw]}
                 style={{ whiteSpace: 'pre-wrap', backgroundColor: 'transparent', minHeight: '100%' }}
             />
             </div>
