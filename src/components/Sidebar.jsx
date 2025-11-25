@@ -1,36 +1,101 @@
 import { useState } from 'react';
 
-const Sidebar = ({ 
-    files, 
-    assets, 
-    loading, 
-    ignorePatterns, 
-    currentFile,
-    onFileSelect, 
-    onInsertImage, 
-    onRefresh, 
-    onAddIgnore, 
-    onRemoveIgnore,
-    onOpenFolder
+import { Virtuoso } from 'react-virtuoso';
+
+const Sidebar = ({
+  files,
+  assets,
+  loading,
+  ignorePatterns,
+  currentFile,
+  onFileSelect,
+  onInsertImage,
+  onRefresh,
+  onAddIgnore,
+  onRemoveIgnore,
+  onOpenFolder
 }) => {
   const [filter, setFilter] = useState('');
   const [newIgnore, setNewIgnore] = useState('');
   const [showIgnoreSettings, setShowIgnoreSettings] = useState(false);
   const [activeTab, setActiveTab] = useState('files');
 
-  const filteredFiles = files.filter(f => 
-    f.name.toLowerCase().includes(filter.toLowerCase())
-  );
-  const filteredAssets = assets.filter(f => 
-    f.name.toLowerCase().includes(filter.toLowerCase())
-  );
+  const filteredFiles = files.filter(f => {
+    try {
+      if (filter.startsWith('/')) {
+        // Regex mode
+        const regex = new RegExp(filter.slice(1), 'i');
+        return regex.test(f.name);
+      }
+      // Fuzzy mode
+      const search = filter.toLowerCase();
+      const name = f.name.toLowerCase();
+      let i = 0, j = 0;
+      while (i < name.length && j < search.length) {
+        if (name[i] === search[j]) j++;
+        i++;
+      }
+      return j === search.length;
+    } catch {
+      return f.name.toLowerCase().includes(filter.toLowerCase());
+    }
+  });
+
+  const filteredAssets = assets.filter(f => {
+    try {
+      if (filter.startsWith('/')) {
+        const regex = new RegExp(filter.slice(1), 'i');
+        return regex.test(f.name);
+      }
+      const search = filter.toLowerCase();
+      const name = f.name.toLowerCase();
+      let i = 0, j = 0;
+      while (i < name.length && j < search.length) {
+        if (name[i] === search[j]) j++;
+        i++;
+      }
+      return j === search.length;
+    } catch {
+      return f.name.toLowerCase().includes(filter.toLowerCase());
+    }
+  });
+
+  const items = activeTab === 'files' ? filteredFiles : filteredAssets;
 
   const handleAddIgnoreSubmit = () => {
-      if(newIgnore) {
-          onAddIgnore(newIgnore);
-          setNewIgnore('');
-      }
+    if (newIgnore) {
+      onAddIgnore(newIgnore);
+      setNewIgnore('');
+    }
   }
+
+  const Row = (index) => {
+    const item = items[index];
+    if (activeTab === 'files') {
+      return (
+        <div
+          className={`file-item ${currentFile?.path === item.path ? 'active' : ''}`}
+          onClick={() => onFileSelect(item)}
+        >
+          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            📄 {item.name}
+          </div>
+        </div>
+      );
+    } else {
+      return (
+        <div
+          className="file-item asset-item"
+          title="Click to insert markdown"
+          onClick={() => onInsertImage && onInsertImage(item)}
+        >
+          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            🖼️ {item.name}
+          </div>
+        </div>
+      );
+    }
+  };
 
   return (
     <div className="sidebar">
@@ -40,23 +105,22 @@ const Sidebar = ({
         </button>
       </div>
 
-      {/* Always show search/tabs if we have items or just show generic empty state */}
       {(files.length > 0 || assets.length > 0 || loading) && (
         <>
-            <div className="sidebar-tabs">
-                <button 
-                    className={activeTab === 'files' ? 'active' : ''} 
-                    onClick={() => setActiveTab('files')}
-                >
-                    Files ({filteredFiles.length})
-                </button>
-                <button 
-                    className={activeTab === 'assets' ? 'active' : ''} 
-                    onClick={() => setActiveTab('assets')}
-                >
-                    Assets ({filteredAssets.length})
-                </button>
-            </div>
+          <div className="sidebar-tabs">
+            <button
+              className={activeTab === 'files' ? 'active' : ''}
+              onClick={() => setActiveTab('files')}
+            >
+              Files ({filteredFiles.length})
+            </button>
+            <button
+              className={activeTab === 'assets' ? 'active' : ''}
+              onClick={() => setActiveTab('assets')}
+            >
+              Assets ({filteredAssets.length})
+            </button>
+          </div>
 
           <div className="sidebar-search">
             <input
@@ -68,7 +132,7 @@ const Sidebar = ({
           </div>
 
           <div className="sidebar-actions">
-            <button 
+            <button
               className="text-btn"
               onClick={() => setShowIgnoreSettings(!showIgnoreSettings)}
             >
@@ -88,13 +152,13 @@ const Sidebar = ({
                   onChange={(e) => setNewIgnore(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleAddIgnoreSubmit()}
                 />
-                <button onClick={handleAddIgnoreSubmit}>+</button>
+                <button onClick={handleAddIgnoreSubmit} aria-label="Add Ignore Pattern">+</button>
               </div>
               <div className="ignore-list">
                 {ignorePatterns.map(pat => (
                   <span key={pat} className="ignore-tag">
                     {pat}
-                    <button onClick={() => onRemoveIgnore(pat)}>×</button>
+                    <button onClick={() => onRemoveIgnore(pat)} aria-label="Remove Ignore Pattern">×</button>
                   </span>
                 ))}
               </div>
@@ -104,30 +168,13 @@ const Sidebar = ({
           <div className="file-list">
             {loading ? (
               <div className="loading">Scanning...</div>
-            ) : activeTab === 'files' ? (
-                filteredFiles.map(file => (
-                    <div
-                    key={file.path}
-                    className={`file-item ${currentFile?.path === file.path ? 'active' : ''}`}
-                    onClick={() => onFileSelect(file)}
-                    >
-                    📄 {file.name}
-                    </div>
-                ))
+            ) : items.length > 0 ? (
+              <Virtuoso
+                style={{ height: '100%' }}
+                totalCount={items.length}
+                itemContent={Row}
+              />
             ) : (
-                filteredAssets.map(file => (
-                    <div
-                    key={file.path}
-                    className="file-item asset-item"
-                    title="Click to insert markdown"
-                    onClick={() => onInsertImage && onInsertImage(file)}
-                    >
-                    🖼️ {file.name}
-                    </div>
-                ))
-            )}
-            
-            {!loading && ((activeTab === 'files' && filteredFiles.length === 0) || (activeTab === 'assets' && filteredAssets.length === 0)) && (
               <div className="empty-state">No items found</div>
             )}
           </div>
